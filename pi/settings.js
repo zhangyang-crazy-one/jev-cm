@@ -125,7 +125,7 @@ export function applyCommand(settings, args) {
     current[keyField(current.provider)] = value;
     return { settings: current, message: statusText(current), save: true };
   }
-  return { error: "用法: /jev [status | provider typesafe|opencode-go | key | model <id> | memory | remember <text>]" };
+  return { error: "用法: /jev [status | provider typesafe|opencode-go | key | model <id> | memory | remember]" };
 }
 
 export function completions(settings, prefix) {
@@ -136,7 +136,7 @@ export function completions(settings, prefix) {
     const typed = parts[0] ?? "";
     return [
       { value: "memory", label: "查看记下了多少句", description: "只显示条数，不列出原文" },
-      { value: "remember", label: "记住一句原文", description: "输入一句，留下这段原话" },
+      { value: "remember", label: "记住这段对话", description: "留下当前对话里的原话" },
       { value: "status", label: "status", description: "查看当前提供方和密钥" },
       { value: "provider", label: "provider", description: "切换提供方" },
       { value: "key", label: "key", description: "填写密钥" },

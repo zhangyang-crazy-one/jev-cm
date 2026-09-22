@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyInjection, candidatesFromMessages, runMemoryStatus } from "./memory.js";
+import { applyInjection, candidatesFromMessages, messagesFromSession, runMemoryStatus } from "./memory.js";
 
 test("agent end keeps prose and ignores tool output", () => {
   const messages = candidatesFromMessages([
@@ -36,4 +36,18 @@ test("memory status hides stored bodies", () => {
   assert.match(notice, /rows 2/);
   assert.match(notice, /key set/);
   assert.equal(notice.includes("secret body"), false);
+});
+
+test("remember keeps the conversation and skips tool output", () => {
+  const messages = messagesFromSession([
+    { type: "message", message: { role: "user", content: "退款窗口是多久" } },
+    { type: "message", message: { role: "assistant", content: [{ type: "text", text: "十四天" }, { type: "toolCall", name: "bash", arguments: { command: "ls" } }] } },
+    { type: "message", message: { role: "toolResult", content: [{ type: "text", text: "secret tool bytes" }] } },
+    { type: "compaction", summary: "generated recap" },
+  ]);
+  assert.deepEqual(messages, [
+    { role: "user", content: "退款窗口是多久" },
+    { role: "assistant", content: "十四天" },
+  ]);
+  assert.deepEqual(messagesFromSession([]), []);
 });

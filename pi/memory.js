@@ -1,6 +1,29 @@
 import { spawnSync } from "node:child_process";
 import { textOf } from "./compact.js";
 
+export function messagesFromSession(entries) {
+  const messages = [];
+  for (const entry of entries || []) {
+    if (entry && entry.type === "message" && entry.message) {
+      messages.push(entry.message);
+    }
+  }
+  return candidatesFromMessages(messages);
+}
+
+export function sessionEntries(manager) {
+  if (!manager) {
+    return [];
+  }
+  if (typeof manager.getBranch === "function") {
+    return manager.getBranch() || [];
+  }
+  if (typeof manager.getEntries === "function") {
+    return manager.getEntries() || [];
+  }
+  return [];
+}
+
 export function candidatesFromMessages(messages) {
   const out = [];
   for (const message of messages || []) {

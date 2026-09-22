@@ -1,5 +1,5 @@
 import { messagesForCompaction, planCompaction, requestCut, resolveBinary, runPrepare } from "./compact.js";
-import { applyInjection, candidatesFromMessages, runCapture, runInject, runMemoryStatus } from "./memory.js";
+import { applyInjection, candidatesFromMessages, messagesFromSession, runCapture, runInject, runMemoryStatus, sessionEntries } from "./memory.js";
 import { applyCommand, completions, envFromSettings, loadSettings, saveSettings, settingsPath, statusText } from "./settings.js";
 
 function childEnv() {
@@ -38,7 +38,7 @@ export default function jevCm(pi) {
   });
 
   pi.registerCommand("jev", {
-    description: "设置 Jev。选中后可查看记下的对话，或记住一句原文",
+    description: "设置 Jev。选中后可查看记下的对话，或留下这段对话",
     getArgumentCompletions: (prefix) => completions(loadSettings(settingsPath()), prefix),
     handler: async (args, ctx) => {
       const text = String(args ?? "").trim();
@@ -47,22 +47,20 @@ export default function jevCm(pi) {
         return;
       }
       if (text === "remember" || text.startsWith("remember ")) {
-        let body = text.slice("remember".length).trim();
-        if (!body) {
-          body = await ctx.ui.input("记住原文", "输入要写入全局记忆的句子");
-        }
-        if (!body) {
-          ctx.ui.notify("未写入", "warning");
+        const identity = sessionIdentity(ctx);
+        const messages = messagesFromSession(sessionEntries(ctx?.sessionManager));
+        if (messages.length === 0) {
+          ctx.ui.notify("这段对话里还没有可留下的内容", "warning");
           return;
         }
-        const identity = sessionIdentity(ctx);
         const saved = runCapture(resolveBinary(), {
           cwd: identity.cwd,
           session_id: identity.session_id,
-          source_id: "manual",
-          messages: [{ role: "user", content: body }],
+          source_id: identity.session_id || "manual",
+          messages,
         }, childEnv());
-        ctx.ui.notify(saved?.stored ? "已写入全局记忆" : "未写入", saved?.stored ? "info" : "warning");
+        const stored = Number(saved?.stored || 0);
+        ctx.ui.notify(stored > 0 ? `已留下这段对话的 ${stored} 条` : "这段对话已经留下", saved ? "info" : "warning");
         return;
       }
       const path = settingsPath();
