@@ -135,13 +135,13 @@ export function completions(settings, prefix) {
   if (parts.length <= 1) {
     const typed = parts[0] ?? "";
     return [
+      { value: "memory", label: "查看记下了多少句", description: "只显示条数，不列出原文" },
+      { value: "remember", label: "记住一句原文", description: "输入一句，留下这段原话" },
       { value: "status", label: "status", description: "查看当前提供方和密钥" },
       { value: "provider", label: "provider", description: "切换提供方" },
       { value: "key", label: "key", description: "填写密钥" },
       { value: "model", label: "model", description: "选择模型" },
-      { value: "memory", label: "memory", description: "查看记下了多少句" },
-      { value: "remember", label: "remember", description: "把一句原文记下来" },
-    ].filter((item) => item.value.startsWith(typed));
+    ].filter((item) => item.value.startsWith(typed) || item.label.startsWith(typed));
   }
   if (parts[0] === "provider" && parts.length === 2) {
     return asItems(PROVIDERS, parts[1]);
