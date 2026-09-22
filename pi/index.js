@@ -38,7 +38,7 @@ export default function jevCm(pi) {
   });
 
   pi.registerCommand("jev", {
-    description: "Show or set the Jev provider, key, and model",
+    description: "设置 Jev。选中后可查看记下的对话，或记住一句原文",
     getArgumentCompletions: (prefix) => completions(loadSettings(settingsPath()), prefix),
     handler: async (args, ctx) => {
       const text = String(args ?? "").trim();

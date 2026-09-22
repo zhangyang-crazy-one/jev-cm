@@ -133,7 +133,15 @@ export function completions(settings, prefix) {
   const parts = String(prefix ?? "").trim().split(/\s+/).filter(Boolean);
   const asItems = (values, typed) => values.filter((value) => value.startsWith(typed)).map((value) => ({ value, label: value }));
   if (parts.length <= 1) {
-    return asItems(["status", "provider", "key", "model", "memory", "remember"], parts[0] ?? "");
+    const typed = parts[0] ?? "";
+    return [
+      { value: "status", label: "status", description: "查看当前提供方和密钥" },
+      { value: "provider", label: "provider", description: "切换提供方" },
+      { value: "key", label: "key", description: "填写密钥" },
+      { value: "model", label: "model", description: "选择模型" },
+      { value: "memory", label: "memory", description: "查看记下了多少句" },
+      { value: "remember", label: "remember", description: "把一句原文记下来" },
+    ].filter((item) => item.value.startsWith(typed));
   }
   if (parts[0] === "provider" && parts.length === 2) {
     return asItems(PROVIDERS, parts[1]);
