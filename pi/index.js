@@ -1,4 +1,4 @@
-import { messagesForCompaction, planCompaction, requestCut, resolveBinary, runPrepare } from "./compact.js";
+import { hostBudget, messagesForCompaction, planCompaction, requestCut, resolveBinary, runPrepare } from "./compact.js";
 import { applyInjection, candidatesFromMessages, messagesFromSession, recallRequest, runCapture, runInject, runMemoryStatus, sessionEntries } from "./memory.js";
 import { applyCommand, completions, envFromSettings, loadSettings, saveSettings, settingsPath, statusText } from "./settings.js";
 
@@ -17,6 +17,7 @@ export default function jevCm(pi) {
       cwd: identity.cwd,
       session_id: identity.session_id,
       source_id: identity.session_id || "manual",
+      link: true,
       messages,
     }, childEnv());
   });
@@ -33,7 +34,7 @@ export default function jevCm(pi) {
     const contextWindow = ctx?.model?.contextWindow ?? 0;
     const cutId = requestCut(preparation, branchEntries, contextWindow);
     const messages = messagesForCompaction(preparation, branchEntries, cutId);
-    const plan = runPrepare(resolveBinary(), messages, childEnv());
+    const plan = runPrepare(resolveBinary(), messages, childEnv(), undefined, hostBudget(preparation, contextWindow));
     return planCompaction({ preparation, branchEntries, contextWindow, plan });
   });
 

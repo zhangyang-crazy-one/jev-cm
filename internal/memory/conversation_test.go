@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"jev-cm/internal/client"
+	"jev-cm/internal/config"
 	"jev-cm/internal/tokens"
 )
 
@@ -138,6 +140,86 @@ func TestRecallUsesTheEndOfTheCurrentSituation(t *testing.T) {
 	ranked := mem.Recall(strings.Repeat("alpha ", 40)+"refund policy", ConversationCollection, InjectBudget)
 	section := Section(ranked)
 	if !strings.Contains(section, "beta refund policy") || strings.Contains(section, "shipping dock") {
+		t.Fatalf("%q", section)
+	}
+}
+
+func TestLinkNewStoresEdgeAndSkipsWithoutKey(t *testing.T) {
+	linkCalls := 0
+	mem, db, _ := openMemory(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			State     string                     `json:"state"`
+			Questions map[string]client.Question `json:"questions"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		linkCalls++
+		score := 0.9
+		if linkCalls > 1 {
+			score = 0.3
+		}
+		answers := map[string]any{}
+		for key := range body.Questions {
+			answers[key] = map[string]any{"noul": score}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"model_version": "jev-1.13.0", "answers": answers})
+	}, nil)
+	older := mem.Ingest(Turn{Text: "alpha refund policy", Role: "user", Cwd: "/proj/a", SessionID: "s1", SourceID: "s1"})
+	fresh := mem.Ingest(Turn{Text: "refund policy update", Role: "assistant", Cwd: "/proj/a", SessionID: "s1", SourceID: "s1"})
+	if older.Status != "stored" || fresh.Status != "stored" || mem.Client.Calls != 0 {
+		t.Fatal(older, fresh, mem.Client.Calls)
+	}
+	mem.LinkNew(fresh.ID, "refund policy update")
+	if mem.Client.Calls != 1 {
+		t.Fatal(mem.Client.Calls)
+	}
+	rows, err := db.Neighborhood(ConversationCollection, []int64{fresh.ID}, 20)
+	if err != nil || len(rows) != 2 || rows[0].ID != fresh.ID || rows[1].ID != older.ID {
+		t.Fatalf("%v %#v", err, rows)
+	}
+	weak := mem.Ingest(Turn{Text: "refund policy tweak", Role: "user", Cwd: "/proj/a", SessionID: "s1", SourceID: "s1"})
+	mem.LinkNew(weak.ID, "refund policy tweak")
+	linked, err := db.Neighborhood(ConversationCollection, []int64{weak.ID}, 20)
+	if err != nil || len(linked) != 1 {
+		t.Fatalf("below-cutoff edge stored: %v %#v", err, linked)
+	}
+	bareCfg, _ := config.Load(map[string]string{"sqlite_path": mem.Config.SQLitePath}, func(string) string { return "" })
+	bare := Memory{Config: bareCfg, Client: &client.Client{Config: bareCfg, LookupEnv: func(string) (string, bool) { return "", false }}, Store: db}
+	before := bare.Client.Calls
+	bare.LinkNew(weak.ID, "refund policy tweak")
+	if bare.Client.Calls != before {
+		t.Fatal("link without key called jev")
+	}
+}
+
+func TestRecallAdmitsLinkedNeighborWithoutSharedTokens(t *testing.T) {
+	mem, db, _ := openMemory(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			State struct {
+				Passages []struct {
+					ID   string `json:"id"`
+					Text string `json:"text"`
+				} `json:"passages"`
+			} `json:"state"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		answers := map[string]any{}
+		for _, passage := range body.State.Passages {
+			score := 0.1
+			if strings.Contains(passage.Text, "beta shipping") {
+				score = 0.9
+			}
+			answers[passage.ID] = map[string]any{"noul": score}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"model_version": "jev-1.13.0", "answers": answers})
+	}, nil)
+	seed := mem.Ingest(Turn{Text: "alpha refund policy", Role: "user", Cwd: "/proj/a", SessionID: "s1", SourceID: "s1"})
+	neighbor := mem.Ingest(Turn{Text: "beta shipping dock schedule", Role: "assistant", Cwd: "/proj/b", SessionID: "s2", SourceID: "s2"})
+	if err := db.InsertEdge(seed.ID, neighbor.ID, "related", 0.9); err != nil {
+		t.Fatal(err)
+	}
+	ranked := mem.Recall("refund", ConversationCollection, InjectBudget)
+	section := Section(ranked)
+	if !strings.Contains(section, "beta shipping dock schedule") || strings.Contains(section, "alpha refund policy") {
 		t.Fatalf("%q", section)
 	}
 }

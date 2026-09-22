@@ -96,6 +96,9 @@ func Prepare(payload map[string]any, cfg config.Config, jev *client.Client) (Pla
 		jev = &client.Client{Config: cfg}
 	}
 	eng := engine.Engine{Config: cfg, Client: jev, Store: opened}
+	if host := numberField(payload, "host_budget"); host > 0 {
+		eng.HostBudget = int(host)
+	}
 	compacted := eng.Compact(messages)
 	if compacted.Status == "fallback" {
 		return Plan{Status: "fallback", UsedTokens: compacted.UsedTokens, Budget: compacted.Budget, Estimator: compacted.Estimator}, nil
@@ -134,6 +137,20 @@ func lastUserText(messages []model.Message) string {
 		}
 	}
 	return ""
+}
+
+func numberField(obj map[string]any, key string) float64 {
+	value, ok := obj[key]
+	if !ok || value == nil {
+		return 0
+	}
+	switch typed := value.(type) {
+	case float64:
+		return typed
+	case int:
+		return float64(typed)
+	}
+	return 0
 }
 
 func stringField(obj map[string]any, key, fallback string) string {

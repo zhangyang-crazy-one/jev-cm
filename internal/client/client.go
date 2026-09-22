@@ -257,7 +257,7 @@ func (c *Client) post(state any, questions map[string]Question) (string, map[str
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey())
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "jev-cm/0.1.0")
+	req.Header.Set("User-Agent", "jev-cm/0.3.0")
 	c.Calls++
 	resp, err := c.httpClient().Do(req)
 	if err != nil {

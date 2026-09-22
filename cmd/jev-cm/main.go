@@ -151,6 +151,7 @@ func run(args []string, lookup func(string) string, stdin io.Reader, stdout, std
 			Cwd       string `json:"cwd"`
 			SessionID string `json:"session_id"`
 			SourceID  string `json:"source_id"`
+			Link      bool   `json:"link"`
 			Messages  []struct {
 				Role             string `json:"role"`
 				Content          string `json:"content"`
@@ -168,6 +169,9 @@ func run(args []string, lookup func(string) string, stdin io.Reader, stdout, std
 		}
 		defer opened.Close()
 		mem := memory.Memory{Config: cfg, Store: opened}
+		if payload.Link {
+			mem.Client = &client.Client{Config: cfg, LookupEnv: pairLookup(lookup)}
+		}
 		stored, ignored := 0, 0
 		for _, message := range payload.Messages {
 			result := mem.Ingest(memory.Turn{
@@ -176,6 +180,9 @@ func run(args []string, lookup func(string) string, stdin io.Reader, stdout, std
 			})
 			if result.Status == "stored" {
 				stored++
+				if payload.Link {
+					mem.LinkNew(result.ID, message.Content)
+				}
 			} else {
 				ignored++
 			}

@@ -221,9 +221,13 @@ export function planCompaction({ preparation, branchEntries, contextWindow, plan
   };
 }
 
-export function runPrepare(binary, messages, env = process.env, spawn = spawnSync) {
+export function runPrepare(binary, messages, env = process.env, spawn = spawnSync, hostBudget = 0) {
+  const payload = { messages };
+  if (hostBudget > 0) {
+    payload.host_budget = hostBudget;
+  }
   const result = spawn(binary, ["prepare"], {
-    input: JSON.stringify({ messages }),
+    input: JSON.stringify(payload),
     encoding: "utf8",
     env,
     timeout: 60_000,

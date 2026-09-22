@@ -12,11 +12,14 @@ import (
 
 const rememberInstructions = "High probability means this entry is durable, non-obvious, and useful on a later turn. Low probability means it is filler, a progress log, or a completed-work note that should not be stored."
 const recallInstructions = "High probability means this passage materially helps with the current request. Low probability means it does not."
+const linkInstructions = "High probability means the new passage and this older passage belong to the same ongoing thread of work. Low probability means they are unrelated."
+const linkSeedLimit = 8
 
 type WriteResult struct {
 	Status      string
 	Probability *float64
 	Reason      string
+	ID          int64
 }
 
 type RecallResult struct {
@@ -90,6 +93,15 @@ func (m *Memory) Recall(request, collection string, budget int) RecallResult {
 	rows, err := m.Store.Shortlist(collection, request, m.Config.ShortlistLimit)
 	if err != nil || len(rows) == 0 {
 		return RecallResult{Status: "ok", Budget: budget, Estimator: tokens.EstimatorName}
+	}
+	if collection == ConversationCollection {
+		seedIDs := make([]int64, len(rows))
+		for i, row := range rows {
+			seedIDs[i] = row.ID
+		}
+		if neighbors, err := m.Store.Neighborhood(collection, seedIDs, m.Config.ShortlistLimit); err == nil && len(neighbors) > 0 {
+			rows = neighbors
+		}
 	}
 	questions := make(map[string]client.Question, len(rows))
 	passages := make([]any, len(rows))
@@ -201,14 +213,55 @@ func (m *Memory) Ingest(turn Turn) WriteResult {
 	if sourceID == "" {
 		sourceID = "manual"
 	}
-	inserted, err := m.Store.InsertIfNew(ConversationCollection, sourceID, turn.Cwd, turn.SessionID, role, turn.Text)
+	id, inserted, err := m.Store.InsertIfNew(ConversationCollection, sourceID, turn.Cwd, turn.SessionID, role, turn.Text)
 	if err != nil {
 		return WriteResult{Status: "unavailable", Reason: "store"}
 	}
 	if !inserted {
 		return WriteResult{Status: "duplicate"}
 	}
-	return WriteResult{Status: "stored"}
+	return WriteResult{Status: "stored", ID: id}
+}
+
+func (m *Memory) LinkNew(id int64, text string) {
+	if m.Client == nil || id == 0 {
+		return
+	}
+	rows, err := m.Store.Shortlist(ConversationCollection, text, linkSeedLimit+1)
+	if err != nil || len(rows) == 0 {
+		return
+	}
+	seeds := make([]store.Row, 0, linkSeedLimit)
+	for _, row := range rows {
+		if row.ID == id {
+			continue
+		}
+		seeds = append(seeds, row)
+		if len(seeds) == linkSeedLimit {
+			break
+		}
+	}
+	if len(seeds) == 0 {
+		return
+	}
+	parts := make([]string, len(seeds))
+	questions := make(map[string]client.Question, len(seeds))
+	for i, row := range seeds {
+		key := "link_" + itoa(i)
+		parts[i] = "[" + key + "]\n" + row.Text
+		questions[key] = client.Question{Type: "noul", Instructions: linkInstructions}
+	}
+	judged, err := m.Client.Evaluate(strings.Join(parts, "\n\n"), questions)
+	if err != nil {
+		return
+	}
+	for i, row := range seeds {
+		answer, ok := judged.Answers["link_"+itoa(i)]
+		if !ok || answer.Probability == nil || *answer.Probability < m.Config.RecallCutoff {
+			continue
+		}
+		_ = m.Store.InsertEdge(id, row.ID, "related", *answer.Probability)
+	}
 }
 
 func Section(result RecallResult) string {

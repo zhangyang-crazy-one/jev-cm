@@ -98,3 +98,17 @@ test("leaves a fitting window to Pi when Jev has nothing to inject", () => {
     plan: { status: "fallback" },
   }), undefined);
 });
+test("passes the host safe line on the prepare payload", () => {
+  let seen;
+  runPrepare("/fake", [{ id: "m0", role: "user", kind: "prose", content: "hi" }], {}, (binary, args, options) => {
+    seen = JSON.parse(options.input);
+    return { status: 0, stdout: JSON.stringify({ status: "fallback" }) };
+  }, 190464);
+  assert.equal(seen.host_budget, 190464);
+  assert.equal(seen.messages.length, 1);
+  runPrepare("/fake", [], {}, (binary, args, options) => {
+    seen = JSON.parse(options.input);
+    return { status: 0, stdout: "{}" };
+  });
+  assert.equal("host_budget" in seen, false);
+});

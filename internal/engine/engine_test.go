@@ -217,3 +217,42 @@ func TestOversizedTailIsEligible(t *testing.T) {
 		t.Fatalf("huge tail stayed protected: %#v", result.Messages[2])
 	}
 }
+func TestHostBudgetReplacesInternalBudget(t *testing.T) {
+	eng, _ := newEngine(t, answers(nil), map[string]string{"pressure_ratio": "0.65", "token_budget": "100000", "protected_tail_tokens": "0"})
+	messages := []model.Message{
+		{ID: "prefix", Role: "system", Kind: "prefix", Content: "RULES"},
+		{ID: "old", Role: "tool", Kind: "tool", Content: "OLD-OUTPUT"},
+	}
+	eng.HostBudget = 1000
+	calm := eng.Compact(messages)
+	if calm.Status != "compacted" || len(calm.Pointers) != 0 || eng.Client.Calls != 0 || calm.Budget != 1000 {
+		t.Fatalf("%#v calls %d", calm, eng.Client.Calls)
+	}
+	eng.HostBudget = 5
+	pressed := eng.Compact(messages)
+	if pressed.Status != "compacted" || eng.Client.Calls != 1 {
+		t.Fatalf("host pressure missed: %#v calls %d", pressed, eng.Client.Calls)
+	}
+	window := eng.FreshWindow(messages, nil, nil, nil)
+	if window.Budget != 5 {
+		t.Fatalf("%#v", window)
+	}
+}
+
+func TestChunkedEvaluateBatchesLargeSpans(t *testing.T) {
+	eng, _ := newEngine(t, answers(nil), map[string]string{"token_limit": "12000", "protected_tail_tokens": "0"})
+	chunk := strings.Repeat("x", 24000)
+	messages := []model.Message{
+		{ID: "prefix", Role: "system", Kind: "prefix", Content: "RULES"},
+		{ID: "t1", Role: "tool", Kind: "tool", Content: chunk},
+		{ID: "t2", Role: "tool", Kind: "tool", Content: chunk},
+		{ID: "t3", Role: "tool", Kind: "tool", Content: chunk},
+	}
+	result := eng.Compact(messages)
+	if result.Status != "compacted" || eng.Client.Calls != 3 {
+		t.Fatalf("%#v calls %d", result, eng.Client.Calls)
+	}
+	if len(result.Pointers) != 0 || result.Messages[1].Content != chunk {
+		t.Fatalf("%#v", result.Messages[1])
+	}
+}

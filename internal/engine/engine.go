@@ -31,9 +31,10 @@ type FreshWindow struct {
 }
 
 type Engine struct {
-	Config config.Config
-	Client *client.Client
-	Store  *store.Store
+	Config     config.Config
+	Client     *client.Client
+	Store      *store.Store
+	HostBudget int
 }
 
 func PointerLine(pointer string) string {
@@ -54,6 +55,9 @@ func FrozenPrefix(messages []model.Message) []model.Message {
 func (e *Engine) Compact(messages []model.Message) Compaction {
 	original := append([]model.Message(nil), messages...)
 	budget := e.Config.TokenBudget
+	if e.HostBudget > 0 {
+		budget = e.HostBudget
+	}
 	used := sessionTokens(original)
 	base := Compaction{Status: "compacted", Messages: original, UsedTokens: used, Budget: budget, Estimator: tokens.EstimatorName}
 	if budget <= 0 || float64(used) < e.Config.PressureRatio*float64(budget) {
@@ -69,18 +73,46 @@ func (e *Engine) Compact(messages []model.Message) Compaction {
 	if len(eligible) == 0 {
 		return base
 	}
-	parts := make([]string, len(eligible))
-	questions := make(map[string]client.Question, len(eligible))
-	for i, message := range eligible {
-		parts[i] = "[" + message.ID + "]\n" + message.Content
-		questions[message.ID] = client.Question{Type: "noul", Instructions: keepInstructions}
+	judged := make(map[string]client.Answer, len(eligible))
+	batchLimit := e.Config.TokenLimit - 1024
+	if batchLimit < 4096 {
+		batchLimit = 4096
 	}
-	judged, err := e.Client.Evaluate(strings.Join(parts, "\n\n"), questions)
-	if err != nil {
-		return Compaction{Status: "fallback", Messages: original, UsedTokens: used, Budget: budget, Estimator: tokens.EstimatorName}
+	for start := 0; start < len(eligible); {
+		end := start
+		size := 0
+		for end < len(eligible) {
+			cost := tokens.Estimate(eligible[end].Content) + 32
+			if end > start && size+cost > batchLimit {
+				break
+			}
+			size += cost
+			end++
+		}
+		batch := eligible[start:end]
+		start = end
+		parts := make([]string, len(batch))
+		for i, message := range batch {
+			parts[i] = "[" + message.ID + "]\n" + message.Content
+		}
+		state := strings.Join(parts, "\n\n")
+		if tokens.Estimate(state) > batchLimit {
+			continue
+		}
+		batchQuestions := make(map[string]client.Question, len(batch))
+		for _, message := range batch {
+			batchQuestions[message.ID] = client.Question{Type: "noul", Instructions: keepInstructions}
+		}
+		result, err := e.Client.Evaluate(state, batchQuestions)
+		if err != nil {
+			return Compaction{Status: "fallback", Messages: original, UsedTokens: used, Budget: budget, Estimator: tokens.EstimatorName}
+		}
+		for key, answer := range result.Answers {
+			judged[key] = answer
+		}
 	}
 	for _, message := range eligible {
-		answer, ok := judged.Answers[message.ID]
+		answer, ok := judged[message.ID]
 		if !ok || answer.Probability == nil {
 			return Compaction{Status: "fallback", Messages: original, UsedTokens: used, Budget: budget, Estimator: tokens.EstimatorName}
 		}
@@ -88,7 +120,7 @@ func (e *Engine) Compact(messages []model.Message) Compaction {
 	rewritten := make([]model.Message, 0, len(original))
 	var pointers []string
 	for _, message := range original {
-		answer, ok := judged.Answers[message.ID]
+		answer, ok := judged[message.ID]
 		if !ok || answer.Probability == nil || *answer.Probability >= e.Config.DropThreshold {
 			rewritten = append(rewritten, message)
 			continue
@@ -133,6 +165,9 @@ func (e *Engine) FreshWindow(messages []model.Message, pointers []string, passag
 	sortPassages(ordered)
 	running := sessionTokens(body)
 	budget := e.Config.TokenBudget
+	if e.HostBudget > 0 {
+		budget = e.HostBudget
+	}
 	blocked := false
 	var over []string
 	for _, passage := range ordered {
