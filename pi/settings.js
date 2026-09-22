@@ -135,7 +135,7 @@ export function completions(settings, prefix) {
   if (parts.length <= 1) {
     const typed = parts[0] ?? "";
     return [
-      { value: "recall", label: "调出记下的对话", description: "把最近留下的原文放进当前会话" },
+      { value: "recall", label: "调出记下的对话", description: "按当前对话打分，只放进对得上的原文" },
       { value: "remember", label: "记住这段对话", description: "留下当前对话里的原话" },
       { value: "memory", label: "查看记下了多少句", description: "只显示条数，不列出原文" },
       { value: "status", label: "status", description: "查看当前提供方和密钥" },

@@ -1,5 +1,5 @@
 import { messagesForCompaction, planCompaction, requestCut, resolveBinary, runPrepare } from "./compact.js";
-import { applyInjection, candidatesFromMessages, messagesFromSession, runCapture, runInject, runMemoryStatus, runRecent, sessionEntries } from "./memory.js";
+import { applyInjection, candidatesFromMessages, messagesFromSession, recallRequest, runCapture, runInject, runMemoryStatus, sessionEntries } from "./memory.js";
 import { applyCommand, completions, envFromSettings, loadSettings, saveSettings, settingsPath, statusText } from "./settings.js";
 
 function childEnv() {
@@ -38,7 +38,7 @@ export default function jevCm(pi) {
   });
 
   pi.registerCommand("jev", {
-    description: "设置 Jev。可以留下这段对话，或把记下的对话调出来",
+    description: "设置 Jev。可以留下这段对话，或按当前对话调出对得上的原文",
     getArgumentCompletions: (prefix) => completions(loadSettings(settingsPath()), prefix),
     handler: async (args, ctx) => {
       const text = String(args ?? "").trim();
@@ -47,10 +47,15 @@ export default function jevCm(pi) {
         return;
       }
       if (text === "recall" || text.startsWith("recall ")) {
-        const query = text.slice("recall".length).trim();
-        const section = (query ? runInject(resolveBinary(), query, childEnv()) : runRecent(resolveBinary(), childEnv())).trim();
+        const extra = text.slice("recall".length).trim();
+        const request = extra || recallRequest(messagesFromSession(sessionEntries(ctx?.sessionManager)));
+        if (!request) {
+          ctx.ui.notify("当前对话里还没有可对照的内容", "warning");
+          return;
+        }
+        const section = runInject(resolveBinary(), request, childEnv()).trim();
         if (!section) {
-          ctx.ui.notify(query ? "没有对得上的原文" : "还没有可调出的对话", "warning");
+          ctx.ui.notify("没有对得上的原文", "warning");
           return;
         }
         if (typeof pi.sendMessage === "function") {
@@ -63,7 +68,7 @@ export default function jevCm(pi) {
         } else {
           ctx.ui.notify(section, "info");
         }
-        ctx.ui.notify("已把记下的对话调进当前会话", "info");
+        ctx.ui.notify("已把对得上的原文调进当前会话", "info");
         return;
       }
       if (text === "remember" || text.startsWith("remember ")) {

@@ -112,27 +112,32 @@ func TestConversationRecallIsGlobalAndBudgeted(t *testing.T) {
 	}
 }
 
-func TestLatestConversationSkipsJevAndKeepsNewestSession(t *testing.T) {
+func TestRecallUsesTheEndOfTheCurrentSituation(t *testing.T) {
 	mem, _, _ := openMemory(t, func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("recall must not call Jev")
-	}, nil)
-	older := []Turn{
-		{Text: "old user", Role: "user", Cwd: "/old", SessionID: "old", SourceID: "old"},
-		{Text: "old reply", Role: "assistant", Cwd: "/old", SessionID: "old", SourceID: "old"},
-	}
-	newer := []Turn{
-		{Text: "refund window", Role: "user", Cwd: "/new", SessionID: "new", SourceID: "new"},
-		{Text: "fourteen days", Role: "assistant", Cwd: "/new", SessionID: "new", SourceID: "new"},
-	}
-	for _, turn := range append(older, newer...) {
-		if got := mem.Ingest(turn); got.Status != "stored" || mem.Client.Calls != 0 {
-			t.Fatal(got, mem.Client.Calls)
+		var body struct {
+			State struct {
+				Passages []struct {
+					ID   string `json:"id"`
+					Text string `json:"text"`
+				} `json:"passages"`
+			} `json:"state"`
 		}
-	}
-	if got := mem.LatestConversation(InjectBudget); got != "refund window\n\nfourteen days" {
-		t.Fatalf("%q", got)
-	}
-	if got := mem.LatestConversation(tokens.Estimate("fourteen days")); got != "fourteen days" {
-		t.Fatalf("budget %q", got)
+		json.NewDecoder(r.Body).Decode(&body)
+		answers := map[string]any{}
+		for _, passage := range body.State.Passages {
+			score := 0.2
+			if strings.Contains(passage.Text, "beta refund") {
+				score = 0.9
+			}
+			answers[passage.ID] = map[string]any{"noul": score}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"model_version": "jev-1.13.0", "answers": answers})
+	}, nil)
+	mem.Ingest(Turn{Text: "beta refund policy", Role: "assistant", Cwd: "/proj/b", SessionID: "s2", SourceID: "s2"})
+	mem.Ingest(Turn{Text: "shipping dock schedule", Role: "user", Cwd: "/proj/a", SessionID: "s1", SourceID: "s1"})
+	ranked := mem.Recall(strings.Repeat("alpha ", 40)+"refund policy", ConversationCollection, InjectBudget)
+	section := Section(ranked)
+	if !strings.Contains(section, "beta refund policy") || strings.Contains(section, "shipping dock") {
+		t.Fatalf("%q", section)
 	}
 }

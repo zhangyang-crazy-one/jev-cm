@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyInjection, candidatesFromMessages, messagesFromSession, runMemoryStatus } from "./memory.js";
+import { applyInjection, candidatesFromMessages, messagesFromSession, recallRequest, runMemoryStatus } from "./memory.js";
 
 test("agent end keeps prose and ignores tool output", () => {
   const messages = candidatesFromMessages([
@@ -50,4 +50,16 @@ test("remember keeps the conversation and skips tool output", () => {
     { role: "assistant", content: "十四天" },
   ]);
   assert.deepEqual(messagesFromSession([]), []);
+});
+
+test("recall request keeps the current turns and drops older ones whole", () => {
+  const current = "退款窗口是十四天";
+  const older = "旧约定".repeat(30);
+  const request = recallRequest([
+    { role: "user", content: older },
+    { role: "assistant", content: current },
+  ], Buffer.byteLength(current, "utf8") / 4);
+  assert.equal(request, current);
+  assert.equal(recallRequest([]), "");
+  assert.equal(recallRequest([{ role: "user", content: "只有一句" }], 1), "只有一句");
 });

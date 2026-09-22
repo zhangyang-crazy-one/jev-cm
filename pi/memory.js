@@ -64,16 +64,33 @@ export function runCapture(binary, payload, env = process.env, spawn = spawnSync
   return runJson(binary, ["capture"], payload, env, spawn);
 }
 
-export function runRecent(binary, env = process.env, spawn = spawnSync) {
-  const result = spawn(binary, ["recent"], {
-    encoding: "utf8",
-    env,
-    timeout: 60_000,
-  });
-  if (result.error || result.status !== 0) {
-    return "";
+const recallRequestBudget = 2000;
+
+function estimate(text) {
+  if (!text) {
+    return 0;
   }
-  return result.stdout || "";
+  const n = Math.ceil(Buffer.byteLength(text, "utf8") / 4);
+  return n < 1 ? 1 : n;
+}
+
+export function recallRequest(messages, budget = recallRequestBudget) {
+  const kept = [];
+  let used = 0;
+  const limit = budget > 0 ? budget : recallRequestBudget;
+  for (let i = (messages || []).length - 1; i >= 0; i -= 1) {
+    const content = String(messages[i] && messages[i].content || "").trim();
+    if (!content) {
+      continue;
+    }
+    const cost = estimate(content);
+    if (kept.length > 0 && used + cost > limit) {
+      break;
+    }
+    kept.push(content);
+    used += cost;
+  }
+  return kept.reverse().join("\n\n");
 }
 
 export function runInject(binary, prompt, env = process.env, spawn = spawnSync) {

@@ -20,7 +20,7 @@ func main() {
 
 func run(args []string, lookup func(string) string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: jev-cm prepare|expand|remember|recall|import-source|capture|inject|memory|recent|purge")
+		fmt.Fprintln(stderr, "usage: jev-cm prepare|expand|remember|recall|import-source|capture|inject|memory|purge")
 		return 2
 	}
 	saved, err := config.ReadSettings(config.SettingsPath(lookup))
@@ -196,19 +196,6 @@ func run(args []string, lookup func(string) string, stdin io.Reader, stdout, std
 				fmt.Fprintln(stderr, err)
 				return 1
 			}
-		}
-		return 0
-	case "recent":
-		opened, err := store.Open(cfg.SQLitePath)
-		if err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
-		}
-		defer opened.Close()
-		mem := memory.Memory{Config: cfg, Store: opened}
-		if _, err := io.WriteString(stdout, mem.LatestConversation(memory.InjectBudget)); err != nil {
-			fmt.Fprintln(stderr, err)
-			return 1
 		}
 		return 0
 	case "memory":
