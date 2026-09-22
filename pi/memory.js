@@ -64,6 +64,18 @@ export function runCapture(binary, payload, env = process.env, spawn = spawnSync
   return runJson(binary, ["capture"], payload, env, spawn);
 }
 
+export function runRecent(binary, env = process.env, spawn = spawnSync) {
+  const result = spawn(binary, ["recent"], {
+    encoding: "utf8",
+    env,
+    timeout: 60_000,
+  });
+  if (result.error || result.status !== 0) {
+    return "";
+  }
+  return result.stdout || "";
+}
+
 export function runInject(binary, prompt, env = process.env, spawn = spawnSync) {
   const result = spawn(binary, ["inject"], {
     input: prompt,

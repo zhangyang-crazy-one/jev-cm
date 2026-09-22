@@ -210,6 +210,22 @@ func (s *Store) MemoryRows(collection, sourceID string) ([]Row, error) {
 	return scanRows(rows)
 }
 
+func (s *Store) Recent(collection string, limit int) ([]Row, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.db.Query(
+		`SELECT source_id, text, sha256, probability, model_version, IFNULL(cwd, ''), IFNULL(session_id, ''), IFNULL(role, '')
+		 FROM memory WHERE collection = ? ORDER BY id DESC LIMIT ?`,
+		collection, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRows(rows)
+}
+
 func (s *Store) Shortlist(collection, query string, limit int) ([]Row, error) {
 	match := ftsQuery(query)
 	if match == "" {

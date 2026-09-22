@@ -59,7 +59,7 @@ Before the agent starts a turn, the system SHALL recall the `conversation` colle
 - **THEN** that passage is omitted entirely and no partial text is injected
 
 ### Requirement: Pi memory commands
-The Pi extension SHALL register `/jev memory` to report the database path and the conversation row count without printing stored bodies. `/jev remember` MUST store the current session's user messages and assistant prose without calling Jev. It MUST NOT ask for a single sentence. Tool results and generated summaries MUST stay out of that write. When the session has no such prose, nothing is inserted.
+The Pi extension SHALL register `/jev memory` to report the database path and the conversation row count without printing stored bodies. `/jev remember` MUST store the current session's user messages and assistant prose without calling Jev. It MUST NOT ask for a single sentence. Tool results and generated summaries MUST stay out of that write. When the session has no such prose, nothing is inserted. `/jev recall` with no extra text MUST place the newest stored conversation's original texts into the current session without calling Jev. A passage that does not fit in 2,000 estimated tokens MUST be omitted whole, keeping the newer texts.
 
 #### Scenario: Status hides bodies
 - **WHEN** the user runs `/jev memory` and the store has rows
@@ -72,3 +72,7 @@ The Pi extension SHALL register `/jev memory` to report the database path and th
 #### Scenario: Empty conversation
 - **WHEN** the user runs `/jev remember` and the session has no user or assistant prose
 - **THEN** nothing is inserted
+
+#### Scenario: Recall the saved conversation
+- **WHEN** the user runs `/jev recall` and a newer conversation is stored after an older one
+- **THEN** the current session receives the newer conversation's original texts and Jev is not called

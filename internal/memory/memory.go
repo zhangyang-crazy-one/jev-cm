@@ -211,6 +211,35 @@ func (m *Memory) Ingest(turn Turn) WriteResult {
 	return WriteResult{Status: "stored"}
 }
 
+func (m *Memory) LatestConversation(budget int) string {
+	if budget <= 0 {
+		budget = InjectBudget
+	}
+	rows, err := m.Store.Recent(ConversationCollection, 200)
+	if err != nil || len(rows) == 0 {
+		return ""
+	}
+	session := rows[0].SessionID
+	var picked []store.Row
+	used := 0
+	for _, row := range rows {
+		if row.SessionID != session {
+			continue
+		}
+		cost := tokens.Estimate(row.Text)
+		if used+cost > budget {
+			continue
+		}
+		picked = append(picked, row)
+		used += cost
+	}
+	parts := make([]string, 0, len(picked))
+	for i := len(picked) - 1; i >= 0; i-- {
+		parts = append(parts, picked[i].Text)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 func Section(result RecallResult) string {
 	var parts []string
 	for _, passage := range result.Passages {

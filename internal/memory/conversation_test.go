@@ -111,3 +111,28 @@ func TestConversationRecallIsGlobalAndBudgeted(t *testing.T) {
 		}
 	}
 }
+
+func TestLatestConversationSkipsJevAndKeepsNewestSession(t *testing.T) {
+	mem, _, _ := openMemory(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("recall must not call Jev")
+	}, nil)
+	older := []Turn{
+		{Text: "old user", Role: "user", Cwd: "/old", SessionID: "old", SourceID: "old"},
+		{Text: "old reply", Role: "assistant", Cwd: "/old", SessionID: "old", SourceID: "old"},
+	}
+	newer := []Turn{
+		{Text: "refund window", Role: "user", Cwd: "/new", SessionID: "new", SourceID: "new"},
+		{Text: "fourteen days", Role: "assistant", Cwd: "/new", SessionID: "new", SourceID: "new"},
+	}
+	for _, turn := range append(older, newer...) {
+		if got := mem.Ingest(turn); got.Status != "stored" || mem.Client.Calls != 0 {
+			t.Fatal(got, mem.Client.Calls)
+		}
+	}
+	if got := mem.LatestConversation(InjectBudget); got != "refund window\n\nfourteen days" {
+		t.Fatalf("%q", got)
+	}
+	if got := mem.LatestConversation(tokens.Estimate("fourteen days")); got != "fourteen days" {
+		t.Fatalf("budget %q", got)
+	}
+}

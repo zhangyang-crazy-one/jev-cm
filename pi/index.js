@@ -1,5 +1,5 @@
 import { messagesForCompaction, planCompaction, requestCut, resolveBinary, runPrepare } from "./compact.js";
-import { applyInjection, candidatesFromMessages, messagesFromSession, runCapture, runInject, runMemoryStatus, sessionEntries } from "./memory.js";
+import { applyInjection, candidatesFromMessages, messagesFromSession, runCapture, runInject, runMemoryStatus, runRecent, sessionEntries } from "./memory.js";
 import { applyCommand, completions, envFromSettings, loadSettings, saveSettings, settingsPath, statusText } from "./settings.js";
 
 function childEnv() {
@@ -38,12 +38,32 @@ export default function jevCm(pi) {
   });
 
   pi.registerCommand("jev", {
-    description: "设置 Jev。选中后可查看记下的对话，或留下这段对话",
+    description: "设置 Jev。可以留下这段对话，或把记下的对话调出来",
     getArgumentCompletions: (prefix) => completions(loadSettings(settingsPath()), prefix),
     handler: async (args, ctx) => {
       const text = String(args ?? "").trim();
       if (text === "memory") {
         ctx.ui.notify(runMemoryStatus(resolveBinary(), childEnv()), "info");
+        return;
+      }
+      if (text === "recall" || text.startsWith("recall ")) {
+        const query = text.slice("recall".length).trim();
+        const section = (query ? runInject(resolveBinary(), query, childEnv()) : runRecent(resolveBinary(), childEnv())).trim();
+        if (!section) {
+          ctx.ui.notify(query ? "没有对得上的原文" : "还没有可调出的对话", "warning");
+          return;
+        }
+        if (typeof pi.sendMessage === "function") {
+          pi.sendMessage({
+            customType: "jev-recall",
+            content: section,
+            display: true,
+            details: { source: "jev-cm" },
+          }, { triggerTurn: false });
+        } else {
+          ctx.ui.notify(section, "info");
+        }
+        ctx.ui.notify("已把记下的对话调进当前会话", "info");
         return;
       }
       if (text === "remember" || text.startsWith("remember ")) {
