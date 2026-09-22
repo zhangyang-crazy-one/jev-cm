@@ -1,0 +1,35 @@
+# Patterns are relative to this file.
+# A leading slash anchors to the repository root.
+# A trailing slash matches only directories.
+# A pattern with no slash matches in any directory.
+# `!` can re-include a file only when a parent directory was not excluded.
+
+# Secrets. `.env.example` stays tracked as a template.
+.env
+.env.*
+!.env.example
+*.pem
+
+# Local elision and memory databases at the repo root.
+# Nested copies, such as future test fixtures, are not matched.
+/data/
+/*.sqlite
+/*.sqlite3
+/*.db
+/*.db-journal
+/*.db-wal
+/*.db-shm
+
+# Go build output. go.mod and go.sum stay tracked.
+/bin/
+/jev-cm
+*.exe
+*.test
+/build/
+/dist/
+
+# Editor and OS junk.
+.idea/
+*~
+*.swp
+.DS_Store

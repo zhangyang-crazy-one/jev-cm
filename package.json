@@ -1,0 +1,8 @@
+{
+  "name": "jev-cm",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": ["./pi/index.js"]
+  }
+}
